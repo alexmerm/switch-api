@@ -7,6 +7,7 @@
 // 2020.02 - @RGSSoftware PR: support for devices without batteries, support for querying /cpu with avg query, verbose log flag
 
 const SWITCH_API_PORT = 8182
+const API_KEY = "SECUREKEY"
 const VERBOSE = process.argv.includes('--verbose')
 
 const http = require('http')
@@ -49,57 +50,65 @@ const startMessage = 'switch-api server started on http://localhost:' + SWITCH_A
 console.log(VERBOSE ? new Date() + ' - ' + startMessage : startMessage)
 
 http.createServer( (req, res)=>{
-    switch (url.parse(req.url).pathname) {
-            
-        // macbook display
-        case '/display':
+	//Validate API Key
+	if ( ('x-api-key' in req.headers) && (req.headers['x-api-key'] ===API_KEY)) {
+	    switch (url.parse(req.url).pathname) {
+	            
+	        // macbook display
+	        case '/display':
 
-            // switch on or off
-            if (req.method == 'POST') body(req, (_, body)=>{
-                VERBOSE && console.log(new Date() + ' - POST /display ' + body)
-                body == 'ON' ? exec('caffeinate -u -t 1') : exec('pmset displaysleepnow')
-                res.end()
-            })
+	            // switch on or off
+	            if (req.method == 'POST') body(req, (_, body)=>{
+	                VERBOSE && console.log(new Date() + ' - POST /display ' + body)
+	                body == 'ON' ? exec('caffeinate -u -t 1') : exec('pmset displaysleepnow')
+	                res.end()
+	            })
 
-            // get current state
-            else {
-                VERBOSE && console.log(new Date() + ' - GET /display')
-                exec('pmset -g powerstate IODisplayWrangler | tail -1 | cut -c29', (_, out, __)=>{
-                    res.write(parseInt(out) < 4 ? 'OFF' : 'ON')
-                    res.end()
-                })
-            }
-            break
+	            // get current state
+	            else {
+	                VERBOSE && console.log(new Date() + ' - GET /display')
+	                exec('pmset -g powerstate IODisplayWrangler | tail -1 | cut -c29', (_, out, __)=>{
+	                    res.write(parseInt(out) < 4 ? 'OFF' : 'ON')
+	                    res.end()
+	                })
+	            }
+	            break
 
-        // power status
-        case '/power':
-            if (req.method == 'GET') {
-                VERBOSE && console.log(new Date() + ' - GET /power')
-                exec('pmset -g batt', (_, out, __)=>{
-                    res.setHeader('Content-Type', 'application/json')
-                    res.write(JSON.stringify(parsePowerStatus(out)))
-                    res.end()
-                })
-            } else {
-                res.statusCode = 405 // method not allowed
-                res.end()
-            }
-            break
+	        // power status
+	        case '/power':
+	            if (req.method == 'GET') {
+	                VERBOSE && console.log(new Date() + ' - GET /power')
+	                exec('pmset -g batt', (_, out, __)=>{
+	                    res.setHeader('Content-Type', 'application/json')
+	                    res.write(JSON.stringify(parsePowerStatus(out)))
+	                    res.end()
+	                })
+	            } else {
+	                res.statusCode = 405 // method not allowed
+	                res.end()
+	            }
+	            break
 
-        // cpu
-        case '/cpu':
-            VERBOSE && console.log(new Date() + ' - GET /cpu')
-            req.method == 'GET' ? res.write(os.loadavg()[mapQueryAvgToLoadAvgIndex(req.url)].toString()) : res.statusCode = 405
-            res.end()
-            break
+	        // cpu
+	        case '/cpu':
+	            VERBOSE && console.log(new Date() + ' - GET /cpu')
+	            req.method == 'GET' ? res.write(os.loadavg()[mapQueryAvgToLoadAvgIndex(req.url)].toString()) : res.statusCode = 405
+	            res.end()
+	            break
 
-        // all other routes
-        default:
-            res.write(
-                '<a href="/display">/display</a><br>' +
-                '<a href="/power">/power</a><br>' + 
-                '<a href="/cpu">/cpu</a>'
-            )
-            res.end()
-    }
+	        // all other routes
+	        default:
+	            res.write(
+	                '<a href="/display">/display</a><br>' +
+	                '<a href="/power">/power</a><br>' + 
+	                '<a href="/cpu">/cpu</a>'
+	            )
+	            res.end()
+	    }
+	} else {
+    	VERBOSE && console.log(new Date() + ' - Request with incorrect API KEY denied')
+		res.write('Request DENIED : Incorrect API Key')
+		res.end()
+	}
+
 }).listen(SWITCH_API_PORT)
